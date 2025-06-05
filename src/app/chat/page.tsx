@@ -11,6 +11,7 @@ interface ChatUser {
   name: string;
   profileImage: string | null;
   latestMessage: string;
+  showMessage: boolean;
   chatId: string;
 }
 
@@ -39,16 +40,17 @@ export default function ChatPage() {
           // Find the user who is NOT the logged-in user
           const otherUserObj = chat.users.find((u: any) => u.user.id !== user.id);
 
-          // Get latest message (assuming last one in array is latest)
-          const latestMessage = chat.messages.length > 0
-            ? chat.messages[chat.messages.length - 1].content
-            : 'No messages yet';
+          const messages = chat.messages || [];
+          const latest = messages.length > 0 ? messages[messages.length - 1] : null;
+
+          console.log("latest === ", latest)
 
           return {
-            id: otherUserObj.user.id,
-            name: otherUserObj.user.name,
-            profileImage: otherUserObj.user.profilePicture,
-            latestMessage,
+            id: otherUserObj?.user?.id ?? '',
+            name: otherUserObj?.user?.name ?? 'Unknown',
+            profileImage: otherUserObj?.user?.profilePicture ?? null,
+            latestMessage: latest?.content ?? 'No messages yet',
+            showMessage: latest?.isRead,
             chatId: chat.id,
           };
         });
@@ -68,28 +70,30 @@ export default function ChatPage() {
 
   return (
     <section>
-        <div>
-            <Link href={`/users`} >New Message + </Link>
-        </div>
-        <div className="p-6 grid gap-4">
-            {users.map((u) => (
-                <Link key={u.chatId} href={`/message/${u.chatId}`}>
-                <div className="flex items-center gap-4 p-4 bg-white shadow rounded-lg hover:bg-gray-100 transition">
-                    <img
-                    src={u.profileImage || '/default-avatar.png'}
-                    alt={u.name}
-                    className="w-12 h-12 rounded-full object-cover"
-                    />
-                    <div>
-                    <h3 className="font-semibold text-lg">{u.name}</h3>
-                    <p className="text-sm text-gray-800 font-medium">
-                        {u.latestMessage}
-                    </p>
-                    </div>
-                </div>
-                </Link>
-            ))}
-        </div>
+      <div className="p-4">
+        <Link href={`/users`} className="text-blue-600 hover:underline font-medium">
+          New Message +
+        </Link>
+      </div>
+      <div className="p-6 grid gap-4">
+        {users.map((u) => (
+          <Link key={u.chatId} href={`/message/${u.chatId}`}>
+            <div className="flex items-center gap-4 p-4 bg-white text-black shadow rounded-lg hover:bg-gray-100 transition">
+              <img
+                src={u.profileImage || '/default-avatar.png'}
+                alt={u.name}
+                className="w-12 h-12 rounded-full object-cover"
+              />
+              <div>
+                <h3 className="font-semibold text-lg">{u.name}</h3>
+                <p className={`${u.showMessage === false ? 'text-green-500 font-medium text-lg' : 'text-black text-sm'}`}>
+                  {u.latestMessage}
+                </p>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
     </section>
   );
 }
