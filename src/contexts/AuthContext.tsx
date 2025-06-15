@@ -5,6 +5,7 @@ import Cookies from 'js-cookie';
 import axios from 'axios';
 
 interface User {
+  profilePicture: null;
   id: string;
   name: string;
   email: string;

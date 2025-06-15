@@ -1,181 +1,14 @@
-// 'use client';
-
-// import { useParams } from 'next/navigation';
-// import { useEffect, useState } from 'react';
-// import axios from 'axios';
-// import Cookies from 'js-cookie';
-// import { useAuth } from '@/contexts/AuthContext';
-// import Image from 'next/image';
-
-// interface User {
-//   id: string;
-//   name: string;
-//   profilePicture: string | null;
-// }
-
-// interface Message {
-//   id: string;
-//   senderId: string;
-//   receiverId: string;
-//   content: string;
-//   createdAt: string;
-//   sender: User;
-//   receiver: User;
-// }
-
-// export default function MessagePage() {
-//   const { id } = useParams();
-//   const [messages, setMessages] = useState<Message[]>([]);
-//   const [newMessage, setNewMessage] = useState('');
-//   const [opponent, setOpponent] = useState<User | null>(null);
-//   const { user, loading } = useAuth();
-//   const token = Cookies.get('token');
-
-//   // console.log("IDDDDDDDDDD === ", id)
-
-//   // Fetch messages and set opponent info
-//   const fetchMessages = async () => {
-//     if (!token || !user) return;
-
-//     try {
-//       const res = await axios.get(
-//         `${process.env.NEXT_PUBLIC_API_URL}/chats/${id}/messages`,
-//         {
-//           headers: {
-//             Authorization: `Bearer ${token}`,
-//           },
-//         }
-//       );
-//       setMessages(res.data);
-
-//       // Get opponent from the first message
-//       const opponentUser =
-//         res.data.length > 0
-//           ? res.data[0].senderId === user.id
-//             ? res.data[0].receiver
-//             : res.data[0].sender
-//           : null;
-
-//       setOpponent(opponentUser);
-//     } catch (error) {
-//       console.error('Failed to fetch messages:', error);
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (user) {
-//       fetchMessages();
-//     }
-//   }, [id, user]);
-
-//   const handleSendMessage = async () => {
-//     if (!token || !newMessage.trim()) return;
-
-//     try {
-//       await axios.post(
-//         `${process.env.NEXT_PUBLIC_API_URL}/chats/create`,
-//         { receiverId: opponent?.id, content: newMessage },
-//         {
-//           headers: {
-//             Authorization: `Bearer ${token}`,
-//           },
-//         }
-//       );
-//       setNewMessage('');
-//       fetchMessages();
-//     } catch (error) {
-//       console.error('Failed to send message:', error);
-//     }
-//   };
-
-//   return (
-//     <div className="flex flex-col h-screen bg-gray-50">
-//       {/* Header */}
-//       <div className="p-4 shadow bg-white sticky top-0 z-10 flex items-center gap-4">
-//         {opponent?.profilePicture ? (
-//           <Image
-//             src={opponent.profilePicture}
-//             alt={opponent.name}
-//             width={40}
-//             height={40}
-//             className="rounded-full object-cover"
-//           />
-//         ) : (
-//           <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 font-bold">
-//             {opponent?.name?.charAt(0)}
-//           </div>
-//         )}
-//         <h2 className="text-lg font-semibold">{opponent?.name || 'User'}</h2>
-//       </div>
-
-//       {/* Messages */}
-//       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-//         {messages.map((msg) => {
-//           const isSender = msg.senderId === user?.id;
-//           return (
-//             <div
-//               key={msg.id}
-//               className={`flex ${isSender ? 'justify-end' : 'justify-start'}`}
-//             >
-//               <div
-//                 className={`max-w-xs md:max-w-md px-4 py-2 rounded-2xl shadow ${
-//                   isSender ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'
-//                 }`}
-//               >
-//                 <p className="text-sm">{msg.content}</p>
-//                 <p className="text-xs mt-1 text-right opacity-70">
-//                   {new Date(msg.createdAt).toLocaleTimeString([], {
-//                     hour: '2-digit',
-//                     minute: '2-digit',
-//                   })}
-//                 </p>
-//               </div>
-//             </div>
-//           );
-//         })}
-//       </div>
-
-//       {/* Input */}
-//       <div className="bg-white shadow p-4 sticky bottom-0 flex items-center gap-2">
-//         <input
-//           type="text"
-//           value={newMessage}
-//           onChange={(e) => setNewMessage(e.target.value)}
-//           placeholder="Type your message..."
-//           className="flex-1 border rounded-full px-4 py-2 focus:outline-none focus:ring focus:ring-blue-200"
-//         />
-//         <button
-//           onClick={handleSendMessage}
-//           className="bg-blue-500 text-white px-5 py-2 rounded-full hover:bg-blue-600 transition"
-//         >
-//           Send
-//         </button>
-//       </div>
-//     </div>
-//   );
-// }
-
-
-
-
-
-
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
-import Cookies from 'js-cookie';
+import api from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-// import { initSocket, getSocket } from '@/lib/socket';
-import Image from 'next/image';
-import { getSocket, initSocket } from '@/utils/socket';
-
-interface User {
-  id: string;
-  name: string;
-  profilePicture: string | null;
-}
+import { initSocket, disconnectSocket } from '@/utils/socket';
+import Avatar from '@/components/Avatar';
+import { FiSend, FiChevronLeft, FiImage } from 'react-icons/fi';
+import { format } from 'date-fns';
+import { toast } from 'react-toastify';
 
 interface Message {
   id: string;
@@ -183,351 +16,241 @@ interface Message {
   receiverId: string;
   content: string;
   createdAt: string;
-  sender: User;
-  receiver: User;
+  isRead: boolean;
+  sender: {
+    id: string;
+    name: string;
+    profilePicture: string | null;
+  };
+  receiver: {
+    id: string;
+    name: string;
+    profilePicture: string | null;
+  };
 }
 
 export default function MessagePage() {
-  const { id } = useParams();
+  const { id: chatId } = useParams<{ id: string }>();
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [opponent, setOpponent] = useState<User | null>(null);
-  const { user, loading } = useAuth();
-  const token = Cookies.get('token');
-  const socketRef = useRef<any>(null);
+  const [opponent, setOpponent] = useState<{
+    id: string;
+    name: string;
+    profilePicture: string | null;
+  } | null>(null);
+  const { user } = useAuth();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [tempMessages, setTempMessages] = useState<Message[]>([]);
 
-  useEffect(() => {
-    if (!token || !user) return;
-
-    const fetchMessages = async () => {
-      try {
-        const res = await axios.get(
-          `${process.env.NEXT_PUBLIC_API_URL}/chats/${id}/messages`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-        setMessages(res.data);
-
-        // Set opponent from message
-        const opponentUser =
-          res.data.length > 0
-            ? res.data[0].senderId === user.id
-              ? res.data[0].receiver
-              : res.data[0].sender
-            : null;
-
-        setOpponent(opponentUser);
-      } catch (error) {
-        console.error('Fetch messages error:', error);
-      }
-    };
-
-    fetchMessages();
-  }, [id, user, token]);
-
-  useEffect(() => {
-    if (!user || !id) return;
-
-    // Init socket
-    const socket = initSocket();
-    socketRef.current = socket;
-
-    socket.emit('joinRoom', id); // Join the chat room
-
-    socket.on('newMessage', (msg: Message) => {
-      setMessages((prev) => [...prev, msg]);
-    });
-
-    return () => {
-      socket.emit('leaveRoom', id);
-      socket.off('newMessage');
-    };
-  }, [id, user]);
-
-  const handleSendMessage = async () => {
-    if (!token || !newMessage.trim() || !opponent?.id) return;
-
+  const fetchMessages = async () => {
     try {
-      const res = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/chats/create`,
-        { receiverId: opponent.id, content: newMessage },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const res = await api.get<Message[]>(`/chats/${chatId}/messages`);
+      setMessages(res.data);
 
-      const savedMessage = res.data;
-
-      // Add to local state (sender side)
-      setMessages((prev) => [...prev, savedMessage]);
-
-      // Emit to socket
-      const socket = getSocket();
-      socket?.emit('sendMessage', { message: savedMessage, roomId: id });
-
-      setNewMessage('');
-    } catch (error) {
-      console.error('Send message error:', error);
+      if (res.data.length > 0) {
+        const opponentUser = res.data[0].senderId === user?.id 
+          ? res.data[0].receiver 
+          : res.data[0].sender;
+        setOpponent(opponentUser);
+      }
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+      toast.error('Failed to load messages');
+    } finally {
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (!user || !chatId) return;
+
+    fetchMessages();
+
+    const socket = initSocket(user.id);
+    socket.emit('joinChat', chatId);
+
+    socket.on('newMessage', (msg: Message) => {
+      // Filter out any temporary messages with the same content
+      setMessages(prev => {
+        const existingMessage = prev.find(m => m.id === msg.id);
+        if (!existingMessage) {
+          return [...prev, msg];
+        }
+        return prev;
+      });
+      setTempMessages(prev => prev.filter(m => m.content !== msg.content));
+    });
+
+    if (messages.length > 0) {
+      socket.emit('markMessagesRead', { chatId, userId: user.id });
+    }
+
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+    return () => {
+      socket.emit('leaveChat', chatId);
+      socket.off('newMessage');
+      disconnectSocket();
+    };
+  }, [chatId, user]);
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !user || !opponent || isSending) return;
+
+    setIsSending(true);
+    const tempId = `temp-${Date.now()}`;
+    const tempMsg = {
+      id: tempId,
+      senderId: user.id,
+      receiverId: opponent.id,
+      content: newMessage,
+      createdAt: new Date().toISOString(),
+      isRead: false,
+      sender: {
+        id: user.id,
+        name: user.name || '',
+        profilePicture: user.profilePicture || null
+      },
+      receiver: {
+        id: opponent.id,
+        name: opponent.name || '',
+        profilePicture: opponent.profilePicture || null
+      }
+    };
+
+    // Add to temporary messages (optimistic update)
+    setTempMessages(prev => [...prev, tempMsg]);
+    setNewMessage('');
+
+    try {
+      const res = await api.post<Message>('/chats/create', {
+        chatId,
+        content: newMessage,
+        receiverId: opponent.id 
+      });
+
+      // Remove temp message and add the real one
+      setTempMessages(prev => prev.filter(m => m.id !== tempId));
+      setMessages(prev => [...prev, res.data]);
+
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } catch (err) {
+      console.error('Error sending message:', err);
+      toast.error('Failed to send message');
+      // Remove the failed temp message
+      setTempMessages(prev => prev.filter(m => m.id !== tempId));
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // Combine real messages with temporary ones
+  const allMessages = [...messages, ...tempMessages].sort((a, b) => 
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-screen bg-gray-50 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      {/* Header */}
-      <div className="p-4 shadow bg-white sticky top-0 z-10 flex items-center gap-4">
-        {opponent?.profilePicture ? (
-          <Image
-            src={opponent.profilePicture}
-            alt={opponent.name}
-            width={40}
-            height={40}
-            className="rounded-full object-cover"
+      <header className="bg-white shadow-sm p-4 flex items-center sticky top-0 z-10">
+        <button 
+          onClick={() => router.back()}
+          className="mr-4 p-2 rounded-full hover:bg-gray-100"
+        >
+          <FiChevronLeft className="text-xl text-black" />
+        </button>
+        <div className="flex items-center flex-1">
+          <Avatar 
+            src={opponent?.profilePicture} 
+            name={opponent?.name} 
+            size="md"
           />
-        ) : (
-          <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 font-bold">
-            {opponent?.name?.charAt(0)}
+          <div className="ml-3">
+            <h2 className="font-semibold text-lg text-black">{opponent?.name || 'User'}</h2>
           </div>
-        )}
-        <h2 className="text-lg font-semibold">{opponent?.name || 'User'}</h2>
-      </div>
+        </div>
+      </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg) => {
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {allMessages.map((msg, index) => {
           const isSender = msg.senderId === user?.id;
+          const showDate = index === 0 || 
+            new Date(msg.createdAt).getDate() !== 
+            new Date(allMessages[index - 1]?.createdAt)?.getDate();
+
           return (
-            <div
-              key={msg.id}
-              className={`flex ${isSender ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-xs md:max-w-md px-4 py-2 rounded-2xl shadow ${
-                  isSender ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'
-                }`}
-              >
-                <p className="text-sm">{msg.content}</p>
-                <p className="text-xs mt-1 text-right opacity-70">
-                  {new Date(msg.createdAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
+            <div key={`${msg.id}-${isSender ? 'sent' : 'received'}`} className="space-y-2">
+              {showDate && (
+                <div className="text-center text-xs text-gray-500 my-4">
+                  {format(new Date(msg.createdAt), 'MMMM d, yyyy')}
+                </div>
+              )}
+              <div className={`flex ${isSender ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-xs md:max-w-md px-4 py-2 rounded-2xl ${
+                    isSender 
+                      ? 'bg-blue-500 text-white rounded-br-none' 
+                      : 'bg-gray-200 text-gray-900 rounded-bl-none'
+                  }`}
+                >
+                  <p className="text-sm">{msg.content}</p>
+                  <div className="flex items-center justify-end mt-1 space-x-1">
+                    <span className="text-xs opacity-70">
+                      {format(new Date(msg.createdAt), 'h:mm a')}
+                    </span>
+                    {isSender && msg.isRead && (
+                      <span className="text-xs">✓✓</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           );
         })}
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="bg-white shadow p-4 sticky bottom-0 flex items-center gap-2">
-        <input
-          type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type your message..."
-          className="flex-1 border rounded-full px-4 py-2 focus:outline-none focus:ring focus:ring-blue-200"
-        />
-        <button
-          onClick={handleSendMessage}
-          className="bg-blue-500 text-white px-5 py-2 rounded-full hover:bg-blue-600 transition"
-        >
-          Send
-        </button>
+      <div className="bg-white border-t p-4 sticky bottom-0">
+        <div className="flex items-center gap-2">
+          <button className="p-2 text-gray-500 hover:text-gray-700">
+            <FiImage className="text-xl" />
+          </button>
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Type your message..."
+            className="flex-1 border rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 text-black"
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={!newMessage.trim() || isSending}
+            className="p-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition disabled:bg-blue-300 disabled:cursor-not-allowed"
+          >
+            <FiSend className="text-xl" />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
-
-
-
-
-
-
-
-// 'use client';
-
-// import { useParams } from 'next/navigation';
-// import { useEffect, useState } from 'react';
-// import axios from 'axios';
-// import Cookies from 'js-cookie';
-// import { useAuth } from '@/contexts/AuthContext';
-// import Image from 'next/image';
-
-// interface User {
-//   id: string;
-//   name: string;
-//   profilePicture: string | null;
-// }
-
-// interface Message {
-//   id: string;
-//   senderId: string;
-//   receiverId: string;
-//   content: string;
-//   createdAt: string;
-//   sender: User;
-//   receiver: User;
-// }
-
-// export default function MessagePage() {
-//   const params = useParams();
-//   const receiverId = params?.id as string;
-
-//   const [messages, setMessages] = useState<Message[]>([]);
-//   const [newMessage, setNewMessage] = useState('');
-//   const [opponent, setOpponent] = useState<User | null>(null);
-//   const { user, loading } = useAuth();
-//   const token = Cookies.get('token');
-
-//   const fetchMessages = async () => {
-//     if (!token || !user) return;
-
-//     try {
-//       const res = await axios.get(
-//         `${process.env.NEXT_PUBLIC_API_URL}/chats/${receiverId}/messages`,
-//         {
-//           headers: {
-//             Authorization: `Bearer ${token}`,
-//           },
-//         }
-//       );
-
-//       setMessages(res.data);
-
-//       // Set opponent from message sender/receiver
-//       if (res.data.length > 0) {
-//         const firstMessage = res.data[0];
-//         const opponentUser =
-//           firstMessage.senderId === user.id ? firstMessage.receiver : firstMessage.sender;
-//         setOpponent(opponentUser);
-//       } else {
-//         // No messages yet, fetch opponent manually
-//         const userRes = await axios.get(
-//           `${process.env.NEXT_PUBLIC_API_URL}/users/${receiverId}`,
-//           {
-//             headers: {
-//               Authorization: `Bearer ${token}`,
-//             },
-//           }
-//         );
-//         setOpponent(userRes.data);
-//       }
-//     } catch (error) {
-//       console.error('❌ Failed to fetch messages:', error);
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (user && receiverId) {
-//       fetchMessages();
-//     }
-//   }, [receiverId, user]);
-
-//   const handleSendMessage = async () => {
-//     if (!token) return;
-
-//     console.log("Token === ", token)
-//     console.log("C User === ", user?.id)
-//     console.log("Opponent === ", receiverId)
-
-//     const trimmed = newMessage.trim();
-//     if (!trimmed) return;
-
-//     try {
-//       await axios.post(
-//         `${process.env.NEXT_PUBLIC_API_URL}/chats/create`,
-//         {
-//           receiverId,
-//           content: trimmed,
-//         },
-//         {
-//           headers: {
-//             Authorization: `Bearer ${token}`,
-//           },
-//         }
-//       );
-//       setNewMessage('');
-//       fetchMessages();
-//     } catch (error) {
-//       console.error('❌ Failed to send message:', error);
-//     }
-//   };
-
-//   return (
-//     <div className="flex flex-col h-screen bg-gray-50">
-//       {/* Header */}
-//       <div className="p-4 shadow bg-white sticky top-0 z-10 flex items-center gap-4">
-//         {opponent?.profilePicture ? (
-//           <Image
-//             src={opponent.profilePicture}
-//             alt={opponent.name}
-//             width={40}
-//             height={40}
-//             className="rounded-full object-cover"
-//           />
-//         ) : (
-//           <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 font-bold">
-//             {opponent?.name?.charAt(0)}
-//           </div>
-//         )}
-//         <h2 className="text-lg font-semibold">{opponent?.name || 'User'}</h2>
-//       </div>
-
-//       {/* Messages */}
-//       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-//         {messages.length === 0 && opponent ? (
-//           <p className="text-center text-gray-500">
-//             Send a message to <strong>{opponent.name}</strong>
-//           </p>
-//         ) : (
-//           messages.map((msg) => {
-//             const isSender = msg.senderId === user?.id;
-//             return (
-//               <div
-//                 key={msg.id}
-//                 className={`flex ${isSender ? 'justify-end' : 'justify-start'}`}
-//               >
-//                 <div
-//                   className={`max-w-xs md:max-w-md px-4 py-2 rounded-2xl shadow ${
-//                     isSender ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'
-//                   }`}
-//                 >
-//                   <p className="text-sm">{msg.content}</p>
-//                   <p className="text-xs mt-1 text-right opacity-70">
-//                     {new Date(msg.createdAt).toLocaleTimeString([], {
-//                       hour: '2-digit',
-//                       minute: '2-digit',
-//                     })}
-//                   </p>
-//                 </div>
-//               </div>
-//             );
-//           })
-//         )}
-//       </div>
-
-//       {/* Input */}
-//       <div className="p-4 bg-white shadow flex gap-2">
-//         <input
-//           type="text"
-//           value={newMessage}
-//           onChange={(e) => setNewMessage(e.target.value)}
-//           className="flex-1 px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-//           placeholder="Type a message..."
-//         />
-//         <button
-//           onClick={handleSendMessage}
-//           className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
-//         >
-//           Send
-//         </button>
-//       </div>
-//     </div>
-//   );
-// }

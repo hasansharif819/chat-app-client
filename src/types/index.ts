@@ -5,7 +5,7 @@ export interface User {
   age: number;
   phone: string;
   gender: 'MALE' | 'FEMALE' | 'OTHER';
-  profileImage?: string;
+  profilePicture?: string;
 }
 
 export interface Message {

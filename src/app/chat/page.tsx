@@ -1,219 +1,190 @@
-// 'use client';
-
-// import { useEffect, useState } from 'react';
-// import Link from 'next/link';
-// import axios from 'axios';
-// import Cookies from 'js-cookie';
-// import { useAuth } from '@/contexts/AuthContext';
-
-// interface ChatUser {
-//   id: string;
-//   name: string;
-//   profileImage: string | null;
-//   latestMessage: string;
-//   showMessage: boolean;
-//   chatId: string;
-// }
-
-// export default function ChatPage() {
-//   const { user, loading } = useAuth();
-//   const [users, setUsers] = useState<ChatUser[]>([]);
-
-//   useEffect(() => {
-//     const fetchUsers = async () => {
-//       const token = Cookies.get('token');
-//       if (!token || !user) return;
-
-//       try {
-//         const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/chats`, {
-//           headers: {
-//             Authorization: `Bearer ${token}`,
-//           },
-//           withCredentials: true,
-//         });
-
-//         const chats = res.data;
-
-//         const otherUsers: ChatUser[] = chats.map((chatData: any) => {
-//           const chat = chatData.chat;
-
-//           // Find the user who is NOT the logged-in user
-//           const otherUserObj = chat.users.find((u: any) => u.user.id !== user.id);
-
-//           const messages = chat.messages || [];
-//           const latest = messages.length > 0 ? messages[messages.length - 1] : null;
-
-//           console.log("latest === ", latest)
-
-//           return {
-//             id: otherUserObj?.user?.id ?? '',
-//             name: otherUserObj?.user?.name ?? 'Unknown',
-//             profileImage: otherUserObj?.user?.profilePicture ?? null,
-//             latestMessage: latest?.content ?? 'No messages yet',
-//             showMessage: latest?.isRead,
-//             chatId: chat.id,
-//           };
-//         });
-
-//         setUsers(otherUsers);
-//       } catch (error) {
-//         console.error('❌ Failed to fetch users:', error);
-//       }
-//     };
-
-//     if (!loading && user) {
-//       fetchUsers();
-//     }
-//   }, [user, loading]);
-
-//   if (loading) return <div className="text-center py-10">Loading...</div>;
-
-//   return (
-//     <section>
-//       <div className="p-4">
-//         <Link href={`/users`} className="text-blue-600 hover:underline font-medium">
-//           New Message +
-//         </Link>
-//       </div>
-//       <div className="p-6 grid gap-4">
-//         {users.map((u) => (
-//           <Link key={u.chatId} href={`/message/${u.chatId}`}>
-//             <div className="flex items-center gap-4 p-4 bg-white text-black shadow rounded-lg hover:bg-gray-100 transition">
-//               <img
-//                 src={u.profileImage || '/default-avatar.png'}
-//                 alt={u.name}
-//                 className="w-12 h-12 rounded-full object-cover"
-//               />
-//               <div>
-//                 <h3 className="font-semibold text-lg">{u.name}</h3>
-//                 <p className={`${u.showMessage === false ? 'text-green-500 font-medium text-lg' : 'text-black text-sm'}`}>
-//                   {u.latestMessage}
-//                 </p>
-//               </div>
-//             </div>
-//           </Link>
-//         ))}
-//       </div>
-//     </section>
-//   );
-// }
-
-
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import axios from 'axios';
-import Cookies from 'js-cookie';
+import api from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { initSocket, getSocket } from '@/utils/socket';
-import { Socket } from 'socket.io-client';
+import { initSocket, disconnectSocket } from '@/utils/socket';
+import Avatar from '@/components/Avatar';
+import { FiMessageSquare, FiSearch, FiPlus } from 'react-icons/fi';
+import TimeAgo from 'react-timeago';
+import { toast } from 'react-toastify';
 
 interface ChatUser {
   id: string;
   name: string;
-  profileImage: string | null;
+  profilePicture: string | null;
   latestMessage: string;
-  showMessage: boolean;
+  unread: boolean;
   chatId: string;
+  timestamp: string;
 }
 
 export default function ChatPage() {
-  const { user, loading } = useAuth();
-  const [users, setUsers] = useState<ChatUser[]>([]);
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const { user } = useAuth();
+  const [chats, setChats] = useState<ChatUser[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchUsers = async () => {
-    const token = Cookies.get('token');
-    if (!token || !user) return;
-
+  const fetchChats = async () => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/chats`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        withCredentials: true,
-      });
-
-      const chats = res.data;
-
-      const otherUsers: ChatUser[] = chats.map((chatData: any) => {
+      const res = await api.get('/chats');
+      const formattedChats = res.data.map((chatData: any) => {
         const chat = chatData.chat;
-
-        const otherUserObj = chat.users.find((u: any) => u.user.id !== user.id);
-        const messages = chat.messages || [];
-        const latest = messages.length > 0 ? messages[messages.length - 1] : null;
+        const otherUser = chat.users.find((u: any) => u.user.id !== user?.id)?.user;
+        const latestMessage = chat.messages?.[0];
 
         return {
-          id: otherUserObj?.user?.id ?? '',
-          name: otherUserObj?.user?.name ?? 'Unknown',
-          profileImage: otherUserObj?.user?.profilePicture ?? null,
-          latestMessage: latest?.content ?? 'No messages yet',
-          showMessage: latest?.isRead,
+          id: otherUser?.id,
+          name: otherUser?.name || 'Unknown',
+          profilePicture: otherUser?.profilePicture,
+          latestMessage: latestMessage?.content || 'No messages yet',
+          unread: latestMessage ? 
+            !latestMessage.isRead && latestMessage.senderId !== user?.id : 
+            false,
           chatId: chat.id,
+          timestamp: latestMessage?.createdAt || chat.updatedAt
         };
-      });
+      }).sort((a: any, b: any) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
 
-      setUsers(otherUsers);
-    } catch (error) {
-      console.error('❌ Failed to fetch users:', error);
+      setChats(formattedChats);
+    } catch (err) {
+      console.error('Error fetching chats:', err);
+      setError('Failed to load chats. Please try again later.');
+      toast.error('Failed to load chats');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!loading && user) {
-      fetchUsers();
+    if (!user) return;
 
-      const sock = initSocket();
-      setSocket(sock);
+    fetchChats();
 
-      sock.emit('join', user.id);
+    const socket = initSocket(user.id);
+    
+    socket.on('connect', () => {
+      console.log('Connected to Socket.IO server');
+    });
 
-      sock.on('newMessage', (data: any) => {
-        console.log('📥 New message received via socket:', data);
-        fetchUsers(); // Re-fetch chat list when a new message comes in
-      });
+    socket.on('newMessage', fetchChats);
+    socket.on('chatUpdate', fetchChats);
 
-      sock.on('connect', () => {
-        console.log('Connected to Socket.IO server');
-      });
+    socket.on('error', (err) => {
+      console.error('Socket error:', err);
+      toast.error('Connection error occurred');
+    });
 
-      return () => {
-        sock.disconnect();
-      };
-    }
-  }, [user, loading]);
-  
+    return () => {
+      socket.off('newMessage');
+      socket.off('chatUpdate');
+      socket.off('error');
+      disconnectSocket();
+    };
+  }, [user]);
 
-  if (loading) return <div className="text-center py-10">Loading...</div>;
+  const filteredChats = chats.filter(chat => 
+    chat.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="max-w-md mx-auto bg-white h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-md mx-auto bg-white h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <p className="text-red-500 mb-4">{error}</p>
+          <button
+            onClick={fetchChats}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <section>
-      <div className="p-4">
-        <Link href={`/users`} className="text-blue-600 hover:underline font-medium">
-          New Message +
+    <div className="max-w-md mx-auto bg-white h-screen flex flex-col">
+      <header className="p-4 border-b sticky top-0 bg-white z-10">
+        <h1 className="text-xl font-bold text-gray-800">Messages</h1>
+      </header>
+
+      <div className="p-4 border-b sticky top-14 bg-white z-10">
+        <div className="relative">
+          <FiSearch className="absolute left-3 top-3 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search messages"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-200"
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {filteredChats.length > 0 ? (
+          filteredChats.map((chat) => (
+            <Link 
+              key={chat.chatId} 
+              href={`/message/${chat.chatId}`}
+              className="block hover:bg-gray-50 transition"
+            >
+              <div className="flex items-center p-4 border-b">
+                <Avatar 
+                  src={chat.profilePicture} 
+                  name={chat.name} 
+                  size="lg"
+                />
+                <div className="ml-3 flex-1">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-semibold">{chat.name}</h3>
+                    <span className="text-xs text-gray-500">
+                      <TimeAgo date={chat.timestamp} />
+                    </span>
+                  </div>
+                  <p className={`text-sm truncate ${chat.unread ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                    {chat.latestMessage}
+                  </p>
+                </div>
+                {chat.unread && (
+                  <div className="ml-2 w-2 h-2 bg-blue-500 rounded-full"></div>
+                )}
+              </div>
+            </Link>
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-gray-500 p-4">
+            <FiMessageSquare className="text-4xl mb-2" />
+            <p className="text-center">No conversations found<br />{searchTerm ? 'Try a different search' : 'Start a new chat to begin messaging'}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 border-t sticky bottom-0 bg-white">
+        <Link 
+          href="/users"
+          className="flex items-center justify-center gap-2 w-full bg-blue-500 text-white py-3 rounded-lg text-center font-medium hover:bg-blue-600 transition"
+        >
+          <FiPlus className="text-lg" />
+          New Message
         </Link>
       </div>
-      <div className="p-6 grid gap-4">
-        {users.map((u) => (
-          <Link key={u.chatId} href={`/message/${u.chatId}`}>
-            <div className="flex items-center gap-4 p-4 bg-white text-black shadow rounded-lg hover:bg-gray-100 transition">
-              <img
-                src={u.profileImage || '/default-avatar.png'}
-                alt={u.name}
-                className="w-12 h-12 rounded-full object-cover"
-              />
-              <div>
-                <h3 className="font-semibold text-lg">{u.name}</h3>
-                <p className={`${u.showMessage === false ? 'text-green-500 font-medium text-lg' : 'text-black text-sm'}`}>
-                  {u.latestMessage}
-                </p>
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </section>
+    </div>
   );
 }
