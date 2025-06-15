@@ -9,6 +9,8 @@ import Avatar from '@/components/Avatar';
 import { FiSend, FiChevronLeft, FiImage } from 'react-icons/fi';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
+import CallPage from '@/components/CallPage';
+import { FiPhone, FiVideo } from 'react-icons/fi';
 
 interface Message {
   id: string;
@@ -44,6 +46,7 @@ export default function MessagePage() {
   const [loading, setLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [tempMessages, setTempMessages] = useState<Message[]>([]);
+  const [isCalling, setIsCalling] = useState(false);
 
   const fetchMessages = async () => {
     try {
@@ -169,9 +172,19 @@ export default function MessagePage() {
     );
   }
 
+  if (isCalling && opponent) {
+  return (
+    <CallPage
+      chatId={chatId}
+      opponentId={opponent.id}
+      onEndCall={() => setIsCalling(false)}
+    />
+  );
+}
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      <header className="bg-white shadow-sm p-4 flex items-center sticky top-0 z-10">
+      {/* <header className="bg-white shadow-sm p-4 flex items-center sticky top-0 z-10">
         <button 
           onClick={() => router.back()}
           className="mr-4 p-2 rounded-full hover:bg-gray-100"
@@ -187,6 +200,33 @@ export default function MessagePage() {
           <div className="ml-3">
             <h2 className="font-semibold text-lg text-black">{opponent?.name || 'User'}</h2>
           </div>
+        </div>
+      </header> */}
+
+      <header className="bg-white shadow-sm p-4 flex items-center sticky top-0 z-10 justify-between">
+        <div className="flex items-center">
+          <button 
+            onClick={() => router.back()}
+            className="mr-4 p-2 rounded-full hover:bg-gray-100"
+          >
+            <FiChevronLeft className="text-xl text-black" />
+          </button>
+          <Avatar 
+            src={opponent?.profilePicture} 
+            name={opponent?.name} 
+            size="md"
+          />
+          <div className="ml-3">
+            <h2 className="font-semibold text-lg text-black">{opponent?.name || 'User'}</h2>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setIsCalling(true)} className="p-2 text-blue-500 hover:text-blue-700">
+            <FiPhone className="text-xl" />
+          </button>
+          <button onClick={() => setIsCalling(true)} className="p-2 text-green-500 hover:text-green-700">
+            <FiVideo className="text-xl" />
+          </button>
         </div>
       </header>
 
